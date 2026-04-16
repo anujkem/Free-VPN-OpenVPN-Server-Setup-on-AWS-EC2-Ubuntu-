@@ -1,6 +1,3 @@
-# Free-VPN-OpenVPN-Server-Setup-on-AWS-EC2-Ubuntu
-
-
 # 🚀 OpenVPN Setup on AWS EC2 (Ubuntu) – Complete DevOps Guide
 
 > Production-ready OpenVPN setup using **Username + Password (PAM Authentication)**  
@@ -12,49 +9,37 @@
 
 ```mermaid
 flowchart LR
-    A[Developer Laptop / Mobile] -->|VPN Connection (UDP 1194)| B(OpenVPN Server - AWS EC2)
-    B --> C[Internet Access via NAT]
-    B --> D[Internal Servers / Hospital Network]
+    A[Developer Device] -->|UDP 1194| B[OpenVPN Server EC2]
+    B --> C[Internet via NAT]
+    B --> D[Internal Network]
 
-    subgraph AWS Cloud
-        B
-    end
+Reason:
+Client → VPN Server → Internet/Internal routing via NAT
 
-    subgraph Clients
-        A
-    end
-
-👉 Explanation:
-
-Users connect via VPN to EC2
-EC2 routes traffic to internet/internal systems
-NAT ensures proper outbound connectivity
 📌 Overview
 Server: Ubuntu 22.04 (AWS EC2)
 VPN Port: UDP 1194
 VPN Network: 10.8.0.0/24
 Authentication: Linux users (PAM)
-Max Users: ~15 developers
-⚙️ Step 0: AWS Pre-Configuration
+⚙️ Step 0: AWS Configuration
 🔐 Security Group
+Allow UDP 1194 (VPN)
+Allow TCP 22 (SSH only your IP)
 
-Allow:
-
-UDP 1194 (VPN)
-TCP 22 (SSH – only your IP)
-
-👉 Reason: Allow VPN traffic securely while restricting admin access.
+Reason: Allow VPN access securely
 
 🔄 Disable Source/Destination Check
 
-👉 Reason: Required for routing VPN traffic through EC2.
+Reason: Required for routing VPN traffic
 
 🧰 Step 1: Install OpenVPN
 sudo apt update && sudo apt upgrade -y
 sudo apt install openvpn easy-rsa -y
 
-👉 Reason: Install VPN service + certificate tools.
+Reason:
 
+openvpn → VPN service
+easy-rsa → certificate generation
 🔐 Step 2: Setup PKI
 make-cadir ~/openvpn-ca
 cd ~/openvpn-ca
@@ -65,9 +50,10 @@ Add:
 set_var EASYRSA_REQ_COUNTRY    "IN"
 set_var EASYRSA_REQ_PROVINCE   "Uttar Pradesh"
 set_var EASYRSA_REQ_CITY       "Meerut"
-set_var EASYRSA_REQ_ORG        "Demo Hospital"
+set_var EASYRSA_REQ_ORG        "Organization"
+set_var EASYRSA_REQ_EMAIL      "admin@example.com"
 
-👉 Reason: Defines certificate identity for secure TLS communication.
+Reason: Certificate identity setup
 
 🔑 Step 3: Generate Certificates
 ./easyrsa init-pki
@@ -77,16 +63,20 @@ set_var EASYRSA_REQ_ORG        "Demo Hospital"
 ./easyrsa gen-dh
 openvpn --genkey secret ~/openvpn-ca/pki/ta.key
 
-👉 Reason:
+Reason:
 
 CA → trust root
-Server cert → server identity
-DH → encryption security
-ta.key → extra protection
-📂 Step 4: Move Certificates
-sudo cp ~/openvpn-ca/pki/* /etc/openvpn/ -r
+Server cert → identity
+DH → encryption
+ta.key → security layer
+📂 Step 4: Copy Certificates
+sudo cp ~/openvpn-ca/pki/ca.crt /etc/openvpn/
+sudo cp ~/openvpn-ca/pki/issued/server.crt /etc/openvpn/
+sudo cp ~/openvpn-ca/pki/private/server.key /etc/openvpn/
+sudo cp ~/openvpn-ca/pki/dh.pem /etc/openvpn/
+sudo cp ~/openvpn-ca/pki/ta.key /etc/openvpn/
 
-👉 Reason: OpenVPN reads configs from /etc/openvpn/.
+Reason: OpenVPN uses /etc/openvpn/
 
 ⚙️ Step 5: Configure OpenVPN
 sudo nano /etc/openvpn/server.conf
@@ -130,7 +120,7 @@ log-append /var/log/openvpn/openvpn.log
 verb 3
 max-clients 15
 
-👉 Reason: Defines VPN behavior, security, authentication.
+Reason: Defines VPN behavior, auth, and security
 
 🔄 Step 6: Enable IP Forwarding
 sudo nano /etc/sysctl.conf
@@ -143,7 +133,7 @@ Apply:
 
 sudo sysctl -p
 
-👉 Reason: Allows routing between VPN clients and network.
+Reason: Enables routing
 
 🌐 Step 7: Configure NAT
 ip route | grep default
@@ -154,20 +144,20 @@ sudo iptables -t nat -A POSTROUTING -s 10.8.0.0/8 -o ens5 -j MASQUERADE
 sudo apt install iptables-persistent -y
 sudo netfilter-persistent save
 
-👉 Reason: Enables internet access for VPN users.
+Reason: Internet access for VPN users
 
 👤 Step 8: Create Users
 sudo useradd -M -s /usr/sbin/nologin dev1
 sudo passwd dev1
 
-👉 Reason: Each developer gets login credentials.
+Reason: User authentication
 
 ▶️ Step 9: Start OpenVPN
 sudo systemctl start openvpn@server
 sudo systemctl enable openvpn@server
 sudo systemctl status openvpn@server
 
-👉 Reason: Start service + auto-start on reboot.
+Reason: Start and auto-enable service
 
 💻 Step 10: Client Config
 cat > client.ovpn << EOF
@@ -183,9 +173,9 @@ cipher AES-256-CBC
 verb 3
 EOF
 
-👉 Reason: Defines client connection settings.
+Reason: Client connection config
 
-🔐 Step 11: Embed Certificates
+🔐 Step 11: Add Certificates
 echo "<ca>" >> client.ovpn
 sudo cat /etc/openvpn/ca.crt >> client.ovpn
 echo "</ca>" >> client.ovpn
@@ -194,21 +184,18 @@ echo "<tls-auth>" >> client.ovpn
 sudo cat /etc/openvpn/ta.key >> client.ovpn
 echo "</tls-auth>" >> client.ovpn
 
-👉 Reason: Single file setup for easy sharing.
+Reason: Single file config
 
-📥 Step 12: Download Config
+📥 Step 12: Download File
 scp -i key.pem ubuntu@YOUR_PUBLIC_IP:~/client.ovpn .
 
-👉 Reason: Transfer securely to local system.
+Reason: Transfer config
 
 📱 Step 13: Connect VPN
 Platform	App
 Windows	OpenVPN GUI
 macOS	Tunnelblick
 Mobile	OpenVPN Connect
-
-👉 Import .ovpn → Login → Connected ✅
-
 🛠️ Troubleshooting
 
 TLS Error
@@ -218,8 +205,6 @@ Fix: Add data-ciphers
 
 Server Not Starting
 
-Cause: Missing cert
-Fix:
 ./easyrsa sign-req server server
 🔧 Maintenance
 sudo systemctl status openvpn@server
@@ -228,15 +213,13 @@ sudo systemctl restart openvpn@server
 ⚠️ Best Practices
 Use Elastic IP
 Rotate passwords
-Monitor EC2 performance
-Backup /etc/openvpn
-Enable log rotation
-🎯 Final Result
+Monitor EC2
+Backup configs
+🎯 Result
 
-✔ Secure VPN Access
-✔ Remote Developer Connectivity
-✔ PAM Authentication
-✔ Production Ready
+✔ Secure VPN
+✔ Remote access
+✔ Production ready
 
 👨‍💻 Author
 
